@@ -17,6 +17,7 @@
 package org.apache.coyote.http2;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -145,6 +146,9 @@ public class TestRfc9218 extends Http2TestBase {
         // 17 - 5266 body left
         // 19 - 7021 body left
         // 21 - 6143 body left
+        // BZ 69614 - invalid priority update frames should be ignored
+        sendInvalidPriorityUpdate(17);
+
 
         // Re-order the priorities
         sendPriorityUpdate(17, 2, true);
@@ -178,5 +182,24 @@ public class TestRfc9218 extends Http2TestBase {
         Assert.assertEquals(0, trace.length());
 
         // Test doesn't read the read of the body for streams 19 and 21.
+    }
+    private void sendInvalidPriorityUpdate(int streamId) throws IOException {
+        byte[] payload = "u=1:i".getBytes(StandardCharsets.US_ASCII);
+
+        byte[] priorityUpdateFrame = new byte[13 + payload.length];
+
+        // length
+        ByteUtil.setThreeBytes(priorityUpdateFrame, 0, 4 + payload.length);
+        // type
+        priorityUpdateFrame[3] = FrameType.PRIORITY_UPDATE.getIdByte();
+        // Stream ID
+        ByteUtil.set31Bits(priorityUpdateFrame, 5, 0);
+
+        // Payload
+        ByteUtil.set31Bits(priorityUpdateFrame, 9, streamId);
+        System.arraycopy(payload, 0, priorityUpdateFrame, 13, payload.length);
+
+        os.write(priorityUpdateFrame);
+        os.flush();
     }
 }
